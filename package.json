@@ -1,0 +1,19 @@
+{
+  "name": "package-inspector",
+  "version": "0.1.0",
+  "description": "A TypeScript CLI for inspecting JavaScript and TypeScript projects.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
