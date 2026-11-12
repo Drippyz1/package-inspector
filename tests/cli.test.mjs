@@ -80,3 +80,26 @@ test("reports no basic warnings for a configured project", () => {
     assert.equal(result.status, 0);
     assert.match(result.stdout, /No basic warnings found/);
 });
+
+test("detects JavaScript and TypeScript projects", () => {
+    const result = runInspector(".");
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Detected Ecosystems: JavaScript \/ TypeScript/);
+});
+
+test("detects Python projects", () => {
+    const result = runInspector("./test-projects/python-project");
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /Detected Ecosystems: Python/);
+    assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript projects only/);
+});
+
+test("detects Java projects", () => {
+    const result = runInspector("./test-projects/java-project");
+
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /Detected Ecosystems: Java \/ JVM/);
+    assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript projects only/);
+});

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getHealthWarnings } from "./health.js";
+import { detectEcosystems } from "./detect.js";
 
 type ProjectInfo = {
   name: string;
@@ -116,6 +117,19 @@ const packageFilePath = join(projectPath, "package.json");
 console.log("Selected folder: " + projectPath);
 
 try {
+    const ecosystems = await detectEcosystems(projectPath);
+
+    console.log(
+        "Detected Ecosystems: " +
+        (ecosystems.length > 0 ? ecosystems.join(", ") : "Unknown")
+    );
+
+    if (!ecosystems.includes("JavaScript / TypeScript")) {
+    throw new Error(
+        "Full inspection currently supports JavaScript/TypeScript projects only."
+    );
+}
+
     const fileContents = await readFile(packageFilePath, "utf-8");
 
     const packageData = JSON.parse(fileContents);
