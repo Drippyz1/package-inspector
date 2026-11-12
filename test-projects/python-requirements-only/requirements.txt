@@ -1,0 +1,7 @@
+# Application dependencies
+
+requests>=2.32
+rich>=13
+
+# Additional requirements
+-r extras.txt

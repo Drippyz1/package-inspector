@@ -96,6 +96,10 @@ test("inspects Python projects", () => {
     assert.match(result.stdout, /Detected Python Project: python-example/);
     assert.match(result.stdout, /Python Dependencies: 2/);
     assert.match(result.stdout, /No basic warnings found/);
+    assert.equal(
+    (result.stdout.match(/Detected Python Project:/g) ?? []).length,
+    1
+);
 });
 
 test("detects Java projects", () => {
@@ -129,4 +133,31 @@ test("supports dynamic Python project versions", () => {
     assert.equal(result.status, 0);
     assert.match(result.stdout, /Detected Python Project: dynamic-python-example/);
     assert.match(result.stdout, /Version: Dynamic/);
+});
+
+test("inspects requirements-only Python projects", () => {
+    const result = runInspector(
+        "./test-projects/python-requirements-only"
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Python Configuration: requirements.txt/);
+    assert.match(result.stdout, /Requirement Entries: 2/);
+    assert.match(result.stdout, /Unprocessed Directives: 1/);
+    assert.equal(
+    (result.stdout.match(/Python Configuration: requirements.txt/g) ?? []).length,
+    1
+);
+});
+
+test("warns when requirements directives are not expanded", () => {
+    const result = runInspector(
+        "./test-projects/python-requirements-only"
+    );
+
+    assert.equal(result.status, 0);
+    assert.match(
+        result.stdout,
+        /Requirements directives were not expanded/
+    );
 });
