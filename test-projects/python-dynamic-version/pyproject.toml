@@ -1,0 +1,3 @@
+[project]
+name = "dynamic-python-example"
+dynamic = ["version"]

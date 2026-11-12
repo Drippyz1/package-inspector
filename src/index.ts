@@ -1,6 +1,10 @@
 import { detectEcosystems } from "./detect.js";
-import { getHealthWarnings } from "./health.js";
+import { getHealthWarnings, getPythonHealthWarnings } from "./health.js";
 import { inspectNodeProject, type PackageData } from "./inspectors/node.js";
+import {
+    inspectPythonProject,
+    type PythonProjectData
+} from "./inspectors/python.js";
 
 type ProjectInfo = {
     name: string;
@@ -11,7 +15,7 @@ type ProjectInfo = {
 const app: ProjectInfo = {
     name: "Package Inspector",
     version: "0.1.0",
-    description: "A tool for inspecting JavaScript projects"
+    description: "A tool for inspecting software projects"
 };
 
 function printWelcome(project: ProjectInfo): void {
@@ -43,6 +47,17 @@ function displayPackage(packageData: PackageData): void {
     );
 }
 
+function displayPythonProject(project: PythonProjectData): void {
+    console.log("Detected Python Project: " + project.name);
+    console.log(
+        "Version: " +
+        (project.version ?? (project.dynamicVersion ? "Dynamic" : "Not Available"))
+    );
+    console.log("Description: " + (project.description ?? "Not Available"));
+    console.log("Requires Python: " + (project.requiresPython ?? "Not Specified"));
+    console.log("Python Dependencies: " + project.dependencies.length);
+}
+
 function displayHealthWarnings(warnings: string[]): void {
     console.log("Health Checks:");
 
@@ -72,19 +87,28 @@ try {
         (ecosystems.length === 0 ? "Unknown" : ecosystems.join(", "))
     );
 
-    if (!ecosystems.includes("JavaScript / TypeScript")) {
+    const hasNode = ecosystems.includes("JavaScript / TypeScript");
+    const hasPython = ecosystems.includes("Python");
+
+    if (!hasNode && !hasPython) {
         throw new Error(
-            "Full inspection currently supports JavaScript/TypeScript projects only."
+            "Full inspection currently supports JavaScript/TypeScript and Python projects only."
         );
     }
 
-    const packageData = await inspectNodeProject(projectPath);
+    if (hasNode) {
+        const packageData = await inspectNodeProject(projectPath);
 
-    displayPackage(packageData);
+        displayPackage(packageData);
+        displayHealthWarnings(getHealthWarnings(packageData));
+    }
 
-    const warnings = getHealthWarnings(packageData);
+    if (hasPython) {
+        const pythonData = await inspectPythonProject(projectPath);
 
-    displayHealthWarnings(warnings);
+        displayPythonProject(pythonData);
+        displayHealthWarnings(getPythonHealthWarnings(pythonData));
+    }
 } catch (error) {
     console.error("Inspection Failed: " + String(error));
     process.exitCode = 1;

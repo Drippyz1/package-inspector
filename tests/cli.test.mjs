@@ -88,12 +88,14 @@ test("detects JavaScript and TypeScript projects", () => {
     assert.match(result.stdout, /Detected Ecosystems: JavaScript \/ TypeScript/);
 });
 
-test("detects Python projects", () => {
+test("inspects Python projects", () => {
     const result = runInspector("./test-projects/python-project");
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0);
     assert.match(result.stdout, /Detected Ecosystems: Python/);
-    assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript projects only/);
+    assert.match(result.stdout, /Detected Python Project: python-example/);
+    assert.match(result.stdout, /Python Dependencies: 2/);
+    assert.match(result.stdout, /No basic warnings found/);
 });
 
 test("detects Java projects", () => {
@@ -101,7 +103,7 @@ test("detects Java projects", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stdout, /Detected Ecosystems: Java \/ JVM/);
-    assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript projects only/);
+    assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript and Python projects only/);
 });
 
 test("rejects invalid project descriptions", () => {
@@ -109,4 +111,22 @@ test("rejects invalid project descriptions", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Project description must be text/);
+});
+
+test("rejects invalid Python dependencies", () => {
+    const result = runInspector("./test-projects/python-invalid-dependencies");
+
+    assert.equal(result.status, 1);
+    assert.match(
+        result.stderr,
+        /Python dependencies must be an array of strings/
+    );
+});
+
+test("supports dynamic Python project versions", () => {
+    const result = runInspector("./test-projects/python-dynamic-version");
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Detected Python Project: dynamic-python-example/);
+    assert.match(result.stdout, /Version: Dynamic/);
 });

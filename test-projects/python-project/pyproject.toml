@@ -1,3 +1,10 @@
 [project]
 name = "python-example"
 version = "0.1.0"
+description = "A sample Python project"
+requires-python = ">=3.11"
+
+dependencies = [
+    "requests>=2.32",
+    "rich>=13"
+]
