@@ -1,0 +1,5 @@
+{
+    "name": "invalid-description-test",
+    "version": "1.0.0",
+    "description": 123
+}

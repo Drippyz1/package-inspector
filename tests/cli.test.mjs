@@ -103,3 +103,10 @@ test("detects Java projects", () => {
     assert.match(result.stdout, /Detected Ecosystems: Java \/ JVM/);
     assert.match(result.stderr, /Full inspection currently supports JavaScript\/TypeScript projects only/);
 });
+
+test("rejects invalid project descriptions", () => {
+    const result = runInspector("./test-projects/invalid-description");
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Project description must be text/);
+});
