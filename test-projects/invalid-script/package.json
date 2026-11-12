@@ -1,0 +1,7 @@
+{
+  "name": "invalid-script-test",
+  "version": "1.0.0",
+  "scripts": {
+    "build": 123
+  }
+}

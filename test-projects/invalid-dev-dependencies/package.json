@@ -1,0 +1,5 @@
+{
+  "name": "invalid-dev-dependencies-test",
+  "version": "1.0.0",
+  "devDependencies": "invalid-data"
+}
