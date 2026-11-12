@@ -64,3 +64,19 @@ test("rejects invalid development dependencies", () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Development Dependencies must be an object/);
 });
+
+test("reports health warnings without failing", () => {
+    const result = runInspector("./test-projects/health-warnings");
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Project description is missing/);
+    assert.match(result.stdout, /No test script is configured/);
+    assert.match(result.stdout, /Total Warnings: 2/);
+});
+
+test("reports no basic warnings for a configured project", () => {
+    const result = runInspector(".");
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /No basic warnings found/);
+});

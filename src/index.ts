@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getHealthWarnings } from "./health.js";
 
 type ProjectInfo = {
   name: string;
@@ -87,9 +88,23 @@ function displayPackage(packageData: PackageData): void {
     console.log(
         "Available Scripts: " +
         (scriptNames.length === 0 ? "None" : scriptNames.join(", "))
-    )
-    
+    );
+}
 
+
+function displayHealthWarnings(warnings: string[]): void {
+    console.log("Health Checks:");
+
+    if (warnings.length === 0) {
+        console.log("[PASS] No basic warnings found.");
+        return;
+    }
+
+    for (const warning of warnings) {
+        console.log("[WARN] " + warning);
+    }
+
+    console.log("Total Warnings: " + warnings.length);
 }
 
 printWelcome(app);
@@ -135,6 +150,10 @@ try {
     validateScripts(packageData.scripts);
 
     displayPackage(packageData);
+
+    const warnings = getHealthWarnings(packageData);
+
+    displayHealthWarnings(warnings);
 
 } catch (error) {
     console.error("Inspection Failed: " + String(error));
