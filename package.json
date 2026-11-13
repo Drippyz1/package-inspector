@@ -6,7 +6,7 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "node --test tests/cli.test.mjs"
+    "test": "node --import tsx --test tests/*.test.mjs"
   },
   "keywords": [],
   "author": "",
