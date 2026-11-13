@@ -1,17 +1,23 @@
 import { readdir } from "node:fs/promises";
-import { detectEcosystems, type Ecosystem } from "./detect.js";
+import { detectEcosystemsFromFiles, type Ecosystem } from "./detect.js";
 import type { Diagnostic } from "./diagnostics.js";
 import {
     getNodeHealthDiagnostics,
     getPythonHealthDiagnostics,
     getRequirementsHealthDiagnostics
 } from "./health.js";
-import { inspectNodeProject, type PackageData } from "./inspectors/node.js";
-import { inspectPythonProject, type PythonProjectData } from "./inspectors/python.js";
+import { inspectNodeProject } from "./inspectors/node.js";
+import { inspectPythonProject } from "./inspectors/python.js";
+import { inspectRequirementsFile } from "./inspectors/requirements.js";
 import {
-    inspectRequirementsFile,
-    type RequirementsSummary
-} from "./inspectors/requirements.js";
+    buildProjectOverview,
+    indexRootEntries,
+    type InspectionSection,
+    type ProjectOverview
+} from "./project.js";
+
+/** Retain the Sprint #8 public type import path. */
+export type { InspectionSection } from "./project.js";
 
 /** How deeply an ecosystem was inspected during this invocation. */
 export type InspectionCoverage = {
@@ -20,44 +26,30 @@ export type InspectionCoverage = {
     details: string;
 };
 
-/** Preserve ecosystem-specific data without forcing it into a lossy shared shape. */
-export type InspectionSection =
-    | { kind: "node"; data: PackageData }
-    | { kind: "python"; data: PythonProjectData }
-    | { kind: "requirements"; data: RequirementsSummary };
-
 /** Result of inspecting a local folder; presentation is intentionally separate. */
 export type InspectionResult = {
     projectPath: string;
     detectedEcosystems: Ecosystem[];
+    overview: ProjectOverview;
     sections: InspectionSection[];
     diagnostics: Diagnostic[];
     coverage: InspectionCoverage[];
 };
 
 /**
- * Read and assess project metadata without executing the project's code,
- * installing dependencies, or reaching out to remote services.
+ * Inspect the selected directory, never executing target project code.
+ * The root is listed once. Supported manifests are validated before an
+ * overview is produced; unrelated configuration files are only identified.
  *
- * An unsupported-only folder still returns detection and coverage details.
- * The CLI decides whether that is an unsuccessful command; other consumers
- * can display partial discovery results. Invalid metadata still throws.
+ * Unsupported-only projects still return discovery facts for API consumers.
+ * The CLI alone determines the unsupported-project exit code.
  */
 export async function inspectProject(projectPath = "."): Promise<InspectionResult> {
-    const detectedEcosystems = await detectEcosystems(projectPath);
+    const root = indexRootEntries(await readdir(projectPath, { withFileTypes: true }));
+    const detectedEcosystems = detectEcosystemsFromFiles(root.files);
     const sections: InspectionSection[] = [];
     const diagnostics: Diagnostic[] = [];
     const coverage: InspectionCoverage[] = [];
-
-    // Currently each ecosystem has one preferred metadata entry point.
-    // A future discovery milestone will inspect multiple configurations.
-    let pythonFiles = new Set<string>();
-    if (detectedEcosystems.includes("Python")) {
-        const entries = await readdir(projectPath, { withFileTypes: true });
-        pythonFiles = new Set(
-            entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
-        );
-    }
 
     if (detectedEcosystems.includes("JavaScript / TypeScript")) {
         const data = await inspectNodeProject(projectPath);
@@ -66,7 +58,7 @@ export async function inspectProject(projectPath = "."): Promise<InspectionResul
     }
 
     if (detectedEcosystems.includes("Python")) {
-        if (pythonFiles.has("pyproject.toml")) {
+        if (root.files.has("pyproject.toml")) {
             const data = await inspectPythonProject(projectPath);
             sections.push({ kind: "python", data });
             diagnostics.push(...getPythonHealthDiagnostics(data));
@@ -85,12 +77,12 @@ export async function inspectProject(projectPath = "."): Promise<InspectionResul
                 details: "package.json metadata and basic health checks only; no script execution, dependency resolution, or vulnerability audit."
             });
         } else if (ecosystem === "Python") {
-            if (pythonFiles.has("pyproject.toml")) {
+            if (root.files.has("pyproject.toml")) {
                 coverage.push({
                     ecosystem,
                     level: "basic",
                     details: "pyproject.toml [project] metadata and basic health checks only; no dependency resolution." +
-                        (pythonFiles.has("requirements.txt")
+                        (root.files.has("requirements.txt")
                             ? " requirements.txt was not inspected."
                             : "")
                 });
@@ -113,6 +105,7 @@ export async function inspectProject(projectPath = "."): Promise<InspectionResul
     return {
         projectPath,
         detectedEcosystems,
+        overview: buildProjectOverview(root, sections),
         sections,
         diagnostics,
         coverage

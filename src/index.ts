@@ -2,6 +2,7 @@ import { inspectProject } from "./inspection.js";
 import {
     printDetectedEcosystems,
     printInspectionReport,
+    printProjectOverview,
     printSelectedFolder,
     printWelcome
 } from "./terminal.js";
@@ -16,6 +17,8 @@ try {
     printDetectedEcosystems(result.detectedEcosystems);
 
     if (result.sections.length === 0) {
+        // Even detection-only projects can show useful, honest discovery facts.
+        printProjectOverview(result.overview);
         throw new Error(
             "Full inspection currently supports JavaScript/TypeScript and Python projects only."
         );
