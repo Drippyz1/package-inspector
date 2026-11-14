@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inspectProject } from "../src/inspection.ts";
+import { summarizeInspection } from "../src/summary.ts";
 import {
     getNodeHealthDiagnostics,
     getPythonHealthDiagnostics,
@@ -68,6 +69,26 @@ test("programmatic inspection returns typed metadata, diagnostics and coverage",
     assert.deepEqual(result.coverage.map((item) => item.level), ["basic"]);
 });
 
+test("summarizes diagnostic severities and coverage without changing the result", async () => {
+    const result = await inspectProject("./test-projects/health-warnings");
+    result.diagnostics.push({
+        code: "PI-TEST-INFO",
+        severity: "info",
+        title: "Example information",
+        message: "An informational test finding.",
+        recommendation: "Review the metadata."
+    });
+    const original = structuredClone(result);
+
+    assert.deepEqual(summarizeInspection(result), {
+        ecosystemsDetected: 1,
+        ecosystemsInspected: 1,
+        coverageCounts: { basic: 1, limited: 0, "detected-only": 0 },
+        diagnosticCounts: { warning: 2, info: 1 }
+    });
+    assert.deepEqual(result, original);
+});
+
 test("unsupported ecosystem is represented honestly without a fake inspection", async () => {
     const result = await inspectProject("./test-projects/java-project");
 
@@ -75,6 +96,12 @@ test("unsupported ecosystem is represented honestly without a fake inspection", 
     assert.deepEqual(result.sections, []);
     assert.deepEqual(result.diagnostics, []);
     assert.deepEqual(result.coverage.map((item) => item.level), ["detected-only"]);
+    assert.deepEqual(summarizeInspection(result), {
+        ecosystemsDetected: 1,
+        ecosystemsInspected: 0,
+        coverageCounts: { basic: 0, limited: 0, "detected-only": 1 },
+        diagnosticCounts: { warning: 0, info: 0 }
+    });
 });
 
 test("invalid metadata rejects instead of returning a nonfatal diagnostic", async () => {

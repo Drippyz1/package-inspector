@@ -8,7 +8,7 @@ Package Inspector is an early-stage, local-first developer CLI that combines a *
 
 ## Features
 
-### Project Explorer (Sprint #9)
+### Project Explorer
 
 - Discover project ecosystems from recognized root-level manifests: JavaScript/TypeScript, Python, Java/JVM, Rust, and Go.
 - Show separate project identities for validated Node.js and Python manifests, including version source and the manifest used.
@@ -27,7 +27,13 @@ Package Inspector is an early-stage, local-first developer CLI that combines a *
 - Keep malformed supported configuration errors **fatal**, separate from nonfatal health advice.
 - Disclose ecosystem coverage as `basic`, `limited`, or `detected-only`.
 
-**Important limitations:** Java/JVM, Rust, and Go are detected but not parsed. Framework detection, workspace traversal, dependency resolution, lockfile parsing, vulnerability scanning, and actual test execution are not provided. If `pyproject.toml` and `requirements.txt` coexist, only `pyproject.toml` is inspected. The Explorer identifies root-level files but does not validate their content unless an existing inspector explicitly reads them. Absence of a warning is not proof of project health.
+### CLI reports
+
+- The standard report includes an inspection summary, Project Explorer, manifest details, health diagnostics, and per-ecosystem coverage.
+- `--brief` shows project identities, the summary, diagnostics with recommended actions, and coverage. It omits the recognized-file inventory and detailed manifest fields.
+- The summary counts detected and inspected ecosystems, coverage at each level, warnings, and informational diagnostics. Basic and limited coverage both count as inspected.
+
+Java/JVM, Rust, and Go have `detected-only` coverage. Inspection covers recognized root entries and supported manifest metadata. Framework detection, workspace traversal, dependency resolution, lockfile parsing, vulnerability scanning, and test execution are outside that scope. If `pyproject.toml` and `requirements.txt` coexist, inspection uses `pyproject.toml`. Coverage describes the scope of a report even when the warning count is zero.
 
 ## Requirements and installation
 
@@ -51,12 +57,27 @@ Inspect another folder:
 npm run dev -- /path/to/project
 ```
 
+Print a brief report. `--brief` works before or after the project path.
+
+```bash
+npm run dev -- --brief /path/to/project
+```
+
+Print usage or the installed version without inspecting a project.
+
+```bash
+npm run dev -- --help
+npm run dev -- --version
+```
+
 Build and run compiled output:
 
 ```bash
 npm run build
 node dist/index.js /path/to/project
 ```
+
+The CLI accepts one optional project path, defaulting to the current directory. Use `--` before a path starting with a dash. Unknown options and additional paths exit with status `1`.
 
 ## Example output
 
@@ -66,6 +87,12 @@ Version: 0.1.0
 Description: A tool for inspecting software projects
 Selected folder: ./sample-app
 Detected Ecosystems: JavaScript / TypeScript
+Inspection Summary:
+  Ecosystems Detected: 1
+  Ecosystems Inspected: 1
+  Coverage: 1 basic, 0 limited, 0 detected-only
+  Total Warnings: 0
+  Informational Diagnostics: 0
 Project Explorer:
   Discovery Scope: Project root only (no recursive scanning)
   Project Identities:
@@ -81,7 +108,7 @@ Detected Project: sample-app
 Detected Version: 1.2.3
 ...
 Health Checks:
-[PASS] No basic warnings found.
+No basic warnings found. See inspection coverage for the scope of these checks.
 Inspection Coverage:
 - JavaScript / TypeScript [basic]: package.json metadata and basic health checks only; no script execution, dependency resolution, or vulnerability audit.
 ```
@@ -90,22 +117,21 @@ The example represents a hypothetical project; other project layouts and rule fi
 
 ## Programmatic use
 
-`inspectProject()` returns ecosystem-specific validated sections **and** a cross-ecosystem `overview`:
+`inspectProject()` returns validated ecosystem sections and a shared overview. `summarizeInspection(result)` derives counts from the result without changing it or doing additional I/O.
 
 ```ts
 // After `npm run build`, from a script in the repository root:
 import { inspectProject } from "./dist/inspection.js";
+import { summarizeInspection } from "./dist/summary.js";
 
 const result = await inspectProject("./sample-app");
+const summary = summarizeInspection(result);
 
 console.log(result.overview.identities);
-console.log(result.overview.recognizedFiles);
-console.log(result.overview.packageManagerEvidence);
-console.log(result.diagnostics);
-console.log(result.coverage);
+console.log(summary);
 ```
 
-This is an internal reusable TypeScript API, not yet a published or versioned library contract. Invalid metadata rejects with an error rather than being converted into a nonfatal warning. For unsupported-only folders the engine still returns discovery facts; the CLI currently exits unsuccessfully.
+These reusable TypeScript modules are available within the repository. Invalid metadata rejects with an error. For folders without a supported ecosystem, the engine returns discovery and coverage data, and the CLI reports the available results before exiting with status `1`.
 
 ## Project layout
 
@@ -117,8 +143,9 @@ This is an internal reusable TypeScript API, not yet a published or versioned li
 | `src/health.ts` | Generate basic, structured health recommendations. |
 | `src/diagnostics.ts` | Presentation-independent diagnostic contract. |
 | `src/inspection.ts` | Single-root-scan orchestration, aggregation, and coverage. |
+| `src/summary.ts` | Pure aggregation of ecosystem, coverage, and diagnostic counts. |
 | `src/terminal.ts` | Terminal display and output sanitization. |
-| `src/index.ts` | CLI entry point and exit behavior. |
+| `src/index.ts` | CLI argument parsing and exit behavior. |
 | `tests/` | Integration and unit/regression tests. |
 | `docs/architecture.md` | Engineering architecture and extension guidance. |
 
@@ -128,6 +155,7 @@ This is an internal reusable TypeScript API, not yet a published or versioned li
 npm run typecheck
 npm test
 npm run build
+git diff --check
 ```
 
 `npm test` uses Node's built-in test runner and the TypeScript test loader. The CLI **does not** execute the inspected project's scripts or install its dependencies. It performs local filesystem inspection only.
@@ -136,7 +164,7 @@ npm run build
 
 - More substantive framework, package manager, and workspace discovery.
 - Evidence-backed health rules, with clear severity and remediation guidance.
-- Better terminal presentation, machine-readable output, and configurable rules.
+- Machine-readable output and configurable rules.
 - Additional ecosystem-specific inspectors and future developer integrations.
 
 See [Architecture](docs/architecture.md) for design constraints, supported boundaries, and how to extend this tool.

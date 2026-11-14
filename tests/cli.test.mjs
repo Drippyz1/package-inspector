@@ -9,10 +9,10 @@ import { join } from "node:path";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
-function runInspector(projectPath) {
+function runInspector(...args) {
     const result = spawnSync(
         process.execPath,
-        ["--import", "tsx", "src/index.ts", projectPath],
+        ["--import", "tsx", "src/index.ts", ...args],
         {
             cwd: projectRoot,
             encoding: "utf8"
@@ -30,8 +30,60 @@ test("inspects a valid project", () => {
     const result = runInspector(".");
 
     assert.equal(result.status, 0);
+    assert.match(result.stdout, /^Selected folder: \.$/m);
     assert.match(result.stdout, /Detected Project: package-inspector/);
     assert.match(result.stdout, /Available Scripts:/);
+});
+
+test("defaults to the current directory when no path is provided", () => {
+    const result = runInspector();
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /^Selected folder: \.$/m);
+    assert.match(result.stdout, /Detected Project: package-inspector/);
+    assert.match(result.stdout, /Inspection Summary:\n  Ecosystems Detected: 1\n  Ecosystems Inspected: 1/);
+});
+
+test("shows help without inspecting an invalid project", () => {
+    const result = runInspector("--help", "./test-projects/invalid-object");
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.match(result.stdout, /^Usage: .*\[project-path\]/m);
+    for (const option of ["--help", "--version", "--brief"]) {
+        assert.ok(result.stdout.includes(option));
+    }
+    assert.doesNotMatch(result.stdout, /Selected folder:|Inspection Summary:/);
+});
+
+test("shows the current version without inspecting an invalid project", () => {
+    const result = runInspector("./test-projects/invalid-object", "--version");
+
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    assert.equal(result.stdout.trim(), "0.1.0");
+});
+
+test("rejects unknown options and multiple project paths before inspection", () => {
+    for (const [args, message] of [
+        [["--help", "--unknown\u001b[2J\n"], /Unknown option.*--unknown/],
+        [[".", "--brief", "./test-projects/health-warnings"], /at most one project path/]
+    ]) {
+        const result = runInspector(...args);
+        assert.equal(result.status, 1);
+        assert.equal(result.stdout, "");
+        assert.match(result.stderr, message);
+        assert.match(result.stderr, /--help for usage/);
+        assert.doesNotMatch(result.stderr, /\u001b|\n.+/);
+    }
+});
+
+test("treats a dash-prefixed project path as positional after the option terminator", () => {
+    const result = runInspector("--brief", "--", "--version");
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Inspection Failed:.*ENOENT/);
+    assert.match(result.stdout, /^Selected folder: --version$/m);
 });
 
 test("rejects invalid scripts", () => {
@@ -39,7 +91,7 @@ test("rejects invalid scripts", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Script "build" must be text/);
-    assert.doesNotMatch(result.stdout, /Health Checks:/);
+    assert.doesNotMatch(result.stdout, /Health Checks:|Inspection Summary:/);
 });
 
 test("rejects invalid dependency versions", () => {
@@ -84,6 +136,7 @@ test("reports no basic warnings for a configured project", () => {
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /No basic warnings found/);
+    assert.doesNotMatch(result.stdout, /\[PASS\]/);
 });
 
 test("detects JavaScript and TypeScript projects", () => {
@@ -112,6 +165,8 @@ test("detects Java projects", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stdout, /Detected Ecosystems: Java \/ JVM/);
+    assert.match(result.stdout, /Ecosystems Inspected: 0/);
+    assert.match(result.stdout, /Java \/ JVM \[detected-only\]: Project files detected/);
     assert.match(
         result.stderr,
         /Full inspection currently supports JavaScript\/TypeScript and Python projects only/
@@ -202,6 +257,59 @@ async function withTempProject(files, callback) {
     }
 }
 
+test("brief mode includes a mixed project's identities, diagnostics, and coverage in either flag position", async () => {
+    await withTempProject({
+        "package.json": JSON.stringify({ name: "brief-node", version: "1.0.0" }),
+        "pyproject.toml": '[project]\nname = "brief-python"\ndynamic = ["version"]\n',
+        "Cargo.toml": "",
+        "README.md": "# Mixed project\n"
+    }, (path) => {
+        const before = runInspector("--brief", path);
+        const after = runInspector(path, "--brief");
+
+        for (const result of [before, after]) {
+            assert.equal(result.status, 0);
+            assert.equal(result.stderr, "");
+        }
+        assert.equal(before.stdout, after.stdout);
+        assert.match(before.stdout, /JavaScript \/ TypeScript: brief-node \(v1\.0\.0; package\.json\)/);
+        assert.match(before.stdout, /Python: brief-python \(Dynamic version; pyproject\.toml\)/);
+        assert.match(before.stdout, /Inspection Summary:\n  Ecosystems Detected: 3\n  Ecosystems Inspected: 2/);
+        assert.match(before.stdout, /Coverage: 2 basic, 0 limited, 1 detected-only/);
+        assert.match(before.stdout, /Total Warnings: 4\n  Informational Diagnostics: 0/);
+        assert.match(before.stdout, /\[PI-NODE-001\]/);
+        assert.match(before.stdout, /\[PI-NODE-002\]/);
+        assert.match(before.stdout, /\[PI-PY-001\]/);
+        assert.match(before.stdout, /\[PI-PY-002\]/);
+        assert.match(before.stdout, /Recommendation: .*requires-python/);
+        assert.match(before.stdout, /Inspection Coverage:/);
+        assert.match(before.stdout, /Discovery Scope: Project root only/);
+        assert.match(before.stdout, /Rust \[detected-only\]: .*no inspection rules/);
+        assert.doesNotMatch(before.stdout, /Project Explorer:|Recognized Files:|README\.md|Available Scripts:/);
+    });
+});
+
+test("sanitizes paths and validation errors in brief mode", async () => {
+    await withTempProject({
+        "package.json": JSON.stringify({
+            name: "invalid-example",
+            version: "1.0.0",
+            scripts: { ["bad\u001b[2J\u009b\n\r\u200f\u2028\u2066script"]: 123 }
+        })
+    }, (path) => {
+        const invalid = runInspector("--brief", path);
+        assert.equal(invalid.status, 1);
+        assert.match(invalid.stderr, /^Inspection Failed: Error: Script "bad \[2J +script" must be text\.\n$/);
+        assert.doesNotMatch(invalid.stdout, /Inspection Summary:|Health Checks:/);
+
+        const missing = runInspector(join(path, "untrusted\n\u202e-path"));
+        assert.equal(missing.status, 1);
+        assert.match(missing.stdout, /Selected folder: .*untrusted  -path\n$/);
+        assert.match(missing.stderr, /Inspection Failed:.*ENOENT.*untrusted  -path/);
+        assert.doesNotMatch(missing.stderr, /\u202e|\n.+/);
+    });
+});
+
 test("discloses basic Node inspection coverage", () => {
     const result = runInspector(".");
 
@@ -216,6 +324,18 @@ test("discloses limited requirements-file coverage", () => {
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /Python \[limited\]: requirements\.txt entries counted/);
+    assert.match(result.stdout, /directives, includes, and package versions were not resolved/);
+});
+
+test("brief mode counts limited inspection and retains requirements directives guidance", () => {
+    const result = runInspector("--brief", "./test-projects/python-requirements-only");
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Python: Metadata unavailable \(Version unavailable; requirements\.txt\)/);
+    assert.match(result.stdout, /Ecosystems Inspected: 1/);
+    assert.match(result.stdout, /Coverage: 0 basic, 1 limited, 0 detected-only/);
+    assert.match(result.stdout, /\[WARN\] \[PI-REQ-001\]/);
+    assert.match(result.stdout, /Recommendation: Review the directives in requirements\.txt manually/);
     assert.match(result.stdout, /directives, includes, and package versions were not resolved/);
 });
 
@@ -265,6 +385,8 @@ test("reports detected-only ecosystems alongside inspected ones", async () => {
 
         assert.equal(result.status, 0);
         assert.match(result.stdout, /Detected Ecosystems: JavaScript \/ TypeScript, Rust/);
+        assert.match(result.stdout, /Ecosystems Detected: 2\n  Ecosystems Inspected: 1/);
+        assert.match(result.stdout, /Coverage: 1 basic, 0 limited, 1 detected-only/);
         assert.match(result.stdout, /Rust \[detected-only\]: Project files detected/);
         assert.match(result.stdout, /Detected Project: node-and-rust/);
     });
@@ -292,6 +414,8 @@ test("unknown project returns an unsupported inspection error", async () => {
 
         assert.equal(result.status, 1);
         assert.match(result.stdout, /Detected Ecosystems: Unknown/);
+        assert.match(result.stdout, /Ecosystems Detected: 0\n  Ecosystems Inspected: 0/);
+        assert.match(result.stdout, /No ecosystems detected\./);
         assert.match(result.stderr, /Full inspection currently supports/);
     });
 });
